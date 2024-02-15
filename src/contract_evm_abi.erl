@@ -1,7 +1,7 @@
 -module(contract_evm_abi).
 
 -export([parse_abifile/1]).
--export([find_function/2, find_event/2, find_event_hash/2]).
+-export([find_function/2, find_event/2, find_event_hash/2, find_error_hash/2]).
 -export([all_events/1, mk_sig/1, mk_fullsig/1]).
 -export([sig_events/1]).
 -export([decode_abi/2]).
@@ -283,6 +283,16 @@ find_event_hash(SigHash, ABI) when is_binary(SigHash), is_list(ABI) ->
     fun
       ({{event,_LName},_CS,_}=ABI1) ->
         SigHash==keccak(mk_sig(ABI1));
+       (_) ->
+        false
+    end,
+    ABI).
+
+find_error_hash(<<Hash:4/binary>>, ABI) when is_list(ABI) ->
+  lists:filter(
+    fun
+      ({{error,_LName},_CS,_}=ABI1) ->
+        Hash==sigb32(mk_sig(ABI1));
        (_) ->
         false
     end,
