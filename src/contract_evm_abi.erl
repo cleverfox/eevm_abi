@@ -204,6 +204,9 @@ decode_abi_internal(<<Val:256/big,RestB/binary>>,[{Name,address}|RestA],Bin,Acc,
 decode_abi_internal(<<Val:256/big,RestB/binary>>,[{Name,address}|RestA],Bin,Acc,Idx, ProcFun) ->
   decode_abi_internal(RestB, RestA, Bin, [{Name, address, Val}|Acc],Idx, ProcFun);
 
+decode_abi_internal(<<Val:32/binary,RestB/binary>>,[{Name,bytes32}|RestA],Bin,Acc,Idx, ProcFun) ->
+  decode_abi_internal(RestB, RestA, Bin, [{Name, {bytes,32}, Val}|Acc],Idx, ProcFun);
+
 decode_abi_internal(<<Val:32/binary,RestB/binary>>,[{Name,{bytes,32}}|RestA],Bin,Acc,Idx, ProcFun) ->
   decode_abi_internal(RestB, RestA, Bin, [{Name, {bytes,32}, Val}|Acc],Idx, ProcFun);
 
@@ -321,6 +324,8 @@ mk_sig_type({indexed,A}) ->
   mk_sig_type(A);
 mk_sig_type({darray,A}) ->
   <<(mk_sig_type(A))/binary,"[]">>;
+mk_sig_type({{fixarray,N},A}) ->
+  <<(mk_sig_type(A))/binary,"[",(integer_to_binary(N))/binary,"]">>;
 mk_sig_type({tuple,Type}) ->
   <<"(",(mk_sig_arr(Type))/binary,")">>;
 
@@ -397,7 +402,7 @@ syntax_scan(String) ->
     fun({atom,Line,Type}) ->
         case valid_type(Type) of
           true ->
-            {typename, Line, Type};
+            {typename, Line, convert_type1(atom_to_binary(Type,latin1))};
           false ->
             {atom,Line,Type}
         end;
@@ -518,6 +523,9 @@ parse_type(L) when is_binary(L) ->
       case binary:split(L2,<<"]">>) of
         [<<>>,<<>>] ->
           {darray,convert_type1(L1)};
+        [AS,<<"[]">>] ->
+          ArrSize=binary_to_integer(AS),
+          {darray,{{fixarray,ArrSize},convert_type1(L1)}};
         [AS,<<>>] ->
           ArrSize=binary_to_integer(AS),
           {{fixarray,ArrSize},convert_type1(L1)}
@@ -526,6 +534,7 @@ parse_type(L) when is_binary(L) ->
 
 convert_type1(<<"string">>) -> string;
 convert_type1(<<"address">>) -> address;
+convert_type1(<<"int256">>) -> int256;
 convert_type1(<<"uint256">>) -> uint256;
 convert_type1(<<"uint32">>) -> uint32;
 convert_type1(<<"uint8">>) -> uint8;
@@ -756,6 +765,7 @@ encode_typed([Val|RVal],[{_Name,Type}|RType], Hdr, Body, BOff) ->
   end.
 
 is_static(bytes) -> false;
+is_static({bytes,_}) -> true;
 is_static(string) -> false;
 is_static({darray,_}) -> false;
 is_static({tuple,T}) -> is_static(T);
