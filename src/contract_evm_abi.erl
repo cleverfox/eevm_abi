@@ -5,6 +5,7 @@
 -export([all_events/1, mk_sig/1, mk_fullsig/1]).
 -export([sig_events/1]).
 -export([decode_abi/2]).
+-export([decode_abi_nosig/2]).
 -export([decode_abi/3]).
 -export([decode_abi/4]).
 -export([encode_abi_call/2]).
@@ -102,6 +103,10 @@ decode_abi(Bin,Args,Indexed) ->
   decode_abi(Bin,Args,Bin,[],Indexed,undefined).
 decode_abi(Bin,Args) ->
   decode_abi(Bin,Args,Bin,[],[],undefined).
+decode_abi_nosig(<<_:4/binary,Bin/binary>>,Args) ->
+  decode_abi(Bin,Args,Bin,[],[],undefined).
+
+
 
 decode_abi(Bin1,Args,Bin2,Acc,Idx,ProcFun) ->
   try
@@ -222,6 +227,9 @@ decode_abi_internal(<<_:248,Val:8/big,RestB/binary>>,[{Name,uint8}|RestA],Bin,Ac
 
 decode_abi_internal(<<Val:256/big,RestB/binary>>,[{Name,uint32}|RestA],Bin,Acc,Idx, ProcFun) ->
   decode_abi_internal(RestB, RestA, Bin, [{Name, uint32, Val band 16#ffffffff}|Acc],Idx, ProcFun);
+
+decode_abi_internal(<<Val:256/big,RestB/binary>>,[{Name,uint64}|RestA],Bin,Acc,Idx, ProcFun) ->
+  decode_abi_internal(RestB, RestA, Bin, [{Name, uint64, Val band (1 bsl 64-1)}|Acc],Idx, ProcFun);
 
 decode_abi_internal(<<Val:256/big,RestB/binary>>,[{Name,uint256}|RestA],Bin,Acc,Idx, ProcFun) ->
   decode_abi_internal(RestB, RestA, Bin, [{Name, uint256, Val}|Acc],Idx, ProcFun).
@@ -567,6 +575,9 @@ encode_type(<<Input:256/big>>, uint256) ->
   <<Input:256/big>>;
 encode_type(Input, uint256) when is_integer(Input) ->
   <<Input:256/big>>;
+encode_type(Input, {uint,N}) when is_integer(Input) ->
+	Number=Input band ((1 bsl N)-1),
+	<<Number:256/big>>;
 
 encode_type(Input, uint32) when is_integer(Input) ->
   <<(Input band 16#ffffffff):256/big>>;
@@ -805,6 +816,8 @@ struct_size1(bytes) ->
 struct_size1({darray,_Type}) ->
   1;
 struct_size1({bytes,N}) when 32>=N ->
+  1;
+struct_size1({uint,_}) ->
   1;
 struct_size1(Type) when is_atom(Type) ->
   1;
